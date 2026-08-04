@@ -19,11 +19,6 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Initial demo users
-INSERT INTO `users` (`id`, `username`, `password`, `package`, `expiry_date`, `bound_device_id`, `session_token`) VALUES
-(1, 'admin', '123456', 'VIP Premium Ultra', '2030-12-31', NULL, NULL),
-(2, 'user1', '1234', 'Basic Plan', '2026-12-31', NULL, NULL)
-ON DUPLICATE KEY UPDATE `username`=`username`;
 
 -- --------------------------------------------------------
 
@@ -35,14 +30,6 @@ CREATE TABLE IF NOT EXISTS `categories` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Initial categories
-INSERT INTO `categories` (`id`, `name`, `icon`) VALUES
-(1, 'All Channels', 'ic_tv'),
-(2, 'Sports Live', 'ic_play'),
-(3, 'News & World', 'ic_info'),
-(4, 'Movies & Cinema', 'ic_play'),
-(5, 'Entertainment', 'ic_tv')
-ON DUPLICATE KEY UPDATE `name`=`name`;
 
 -- --------------------------------------------------------
 
@@ -58,15 +45,6 @@ CREATE TABLE IF NOT EXISTS `channels` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Initial channels
-INSERT INTO `channels` (`id`, `name`, `logo_url`, `stream_url`, `category_id`, `is_premium`, `stream_type`) VALUES
-(1, 'OTT KING Sports 1 HD', 'https://picsum.photos/200/200?random=1', 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', 2, 0, 'hls'),
-(2, 'OTT KING Premium Sports 4K', 'https://picsum.photos/200/200?random=2', 'https://playertest.longtailvideo.com/adaptive/bbbell/bbbell.m3u8', 2, 1, 'hls'),
-(3, 'World News 24/7', 'https://picsum.photos/200/200?random=3', 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 3, 0, 'hls'),
-(4, 'Action Movies Live', 'https://picsum.photos/200/200?random=4', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', 4, 0, 'ts'),
-(5, 'VIP Cinema Ultra', 'https://picsum.photos/200/200?random=5', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', 4, 1, 'ts'),
-(6, 'Entertainment Plus', 'https://picsum.photos/200/200?random=6', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', 5, 0, 'ts')
-ON DUPLICATE KEY UPDATE `name`=`name`;
 
 -- --------------------------------------------------------
 
@@ -83,11 +61,6 @@ CREATE TABLE IF NOT EXISTS `notifications` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Initial notifications
-INSERT INTO `notifications` (`id`, `title`, `message`, `target_username`, `target_package`, `type`, `action_text`) VALUES
-(1, 'Server Upgrade Notice', 'OTT KING Live TV server upgrade completed successfully. All 4K streams are active.', '', '', 'SYSTEM', 'OK'),
-(2, 'VIP Account Special Welcome', 'Exclusive access active for VIP Users! Stream 4K Live Sports & Ultra Movies now.', 'admin', 'VIP Premium Ultra', 'USER', 'Explore VIP')
-ON DUPLICATE KEY UPDATE `title`=`title`;
 
 -- --------------------------------------------------------
 

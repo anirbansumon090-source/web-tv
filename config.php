@@ -16,6 +16,22 @@ define('DB_PASS', '');
 define('DB_NAME', 'ottking_db');
 define('DB_PORT', 3306);
 
+function hash_password(string $password): string {
+    return password_hash($password, PASSWORD_DEFAULT);
+}
+
+function verify_password(string $password, string $storedHash): bool {
+    if (empty($storedHash)) {
+        return false;
+    }
+
+    if (str_starts_with($storedHash, '$2') || str_starts_with($storedHash, '$argon2') || str_starts_with($storedHash, '$pbkdf2')) {
+        return password_verify($password, $storedHash);
+    }
+
+    return hash_equals($storedHash, $password);
+}
+
 /**
  * Unified Database Adapter supporting MySQLi and SQLite (fallback)
  */
@@ -25,19 +41,20 @@ class AppDatabase {
     private $is_mysqli = false;
 
     public function __construct() {
-        // Attempt MySQLi Connection first (for phpMyAdmin / MySQL environment)
-        mysqli_report(MYSQLI_REPORT_OFF);
-        try {
-            $conn = @new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
-            if (!$conn->connect_error) {
-                $this->mysqli = $conn;
-                $this->mysqli->set_charset("utf8mb4");
-                $this->is_mysqli = true;
-                $this->initMysqlTables();
-                return;
+        if (function_exists('mysqli_init') && extension_loaded('mysqli')) {
+            mysqli_report(MYSQLI_REPORT_OFF);
+            try {
+                $conn = @new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
+                if (!$conn->connect_error) {
+                    $this->mysqli = $conn;
+                    $this->mysqli->set_charset("utf8mb4");
+                    $this->is_mysqli = true;
+                    $this->initMysqlTables();
+                    return;
+                }
+            } catch (Exception $e) {
+                // MySQL unavailable - proceed to SQLite fallback
             }
-        } catch (Exception $e) {
-            // MySQL unavailable - proceed to SQLite fallback
         }
 
         // SQLite PDO Fallback for local embedded dev environment
@@ -103,12 +120,12 @@ class AppDatabase {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // Seed initial data if empty
+        // Bootstrap a single admin user if the database is empty.
         $res = $this->mysqli->query("SELECT COUNT(*) as cnt FROM users");
         if ($res && $res->fetch_assoc()['cnt'] == 0) {
-            $this->mysqli->query("INSERT INTO users (username, password, package, expiry_date) VALUES 
-                ('admin', '123456', 'VIP Premium Ultra', '2030-12-31'),
-                ('user1', '1234', 'Basic Plan', '2026-12-31')");
+            $adminHash = hash_password('123456');
+            $adminHash = $this->mysqli->real_escape_string($adminHash);
+            $this->mysqli->query("INSERT INTO users (username, password, package, expiry_date) VALUES ('admin', '$adminHash', 'VIP Premium Ultra', '2030-12-31')");
         }
 
         $res = $this->mysqli->query("SELECT COUNT(*) as cnt FROM notifications");
@@ -120,12 +137,12 @@ class AppDatabase {
 
         $res = $this->mysqli->query("SELECT COUNT(*) as cnt FROM categories");
         if ($res && $res->fetch_assoc()['cnt'] == 0) {
-            $this->mysqli->query("INSERT INTO categories (id, name, icon) VALUES 
-                (1, 'All Channels', 'ic_tv'),
-                (2, 'Sports Live', 'ic_play'),
-                (3, 'News & World', 'ic_info'),
-                (4, 'Movies & Cinema', 'ic_play'),
-                (5, 'Entertainment', 'ic_tv')");
+            $this->mysqli->query("INSERT INTO categories (name, icon) VALUES 
+                ('All Channels', 'ic_tv'),
+                ('Sports Live', 'ic_play'),
+                ('News & World', 'ic_info'),
+                ('Movies & Cinema', 'ic_play'),
+                ('Entertainment', 'ic_tv')");
         }
 
         $res = $this->mysqli->query("SELECT COUNT(*) as cnt FROM channels");
@@ -190,9 +207,7 @@ class AppDatabase {
 
         $userCount = $this->pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
         if ($userCount == 0) {
-            $this->pdo->exec("INSERT INTO users (username, password, package, expiry_date) VALUES 
-                ('admin', '123456', 'VIP Premium Ultra', '2030-12-31'),
-                ('user1', '1234', 'Basic Plan', '2026-12-31')");
+            $this->pdo->exec("INSERT INTO users (username, password, package, expiry_date) VALUES ('admin', '" . hash_password('123456') . "', 'VIP Premium Ultra', '2030-12-31')");
         }
 
         $notifCount = $this->pdo->query("SELECT COUNT(*) FROM notifications")->fetchColumn();
@@ -204,19 +219,19 @@ class AppDatabase {
 
         $catCount = $this->pdo->query("SELECT COUNT(*) FROM categories")->fetchColumn();
         if ($catCount == 0) {
-            $this->pdo->exec("INSERT INTO categories (id, name, icon) VALUES 
-                (1, 'All Channels', 'ic_tv'),
-                (2, 'Sports Live', 'ic_play'),
-                (3, 'News & World', 'ic_info'),
-                (4, 'Movies & Cinema', 'ic_play'),
-                (5, 'Entertainment', 'ic_tv')");
+            $this->pdo->exec("INSERT INTO categories (name, icon) VALUES 
+                ('All Channels', 'ic_tv'),
+                ('Sports Live', 'ic_play'),
+                ('News & World', 'ic_info'),
+                ('Movies & Cinema', 'ic_play'),
+                ('Entertainment', 'ic_tv')");
         }
 
         $chanCount = $this->pdo->query("SELECT COUNT(*) FROM channels")->fetchColumn();
         if ($chanCount == 0) {
             $this->pdo->exec("INSERT INTO channels (name, logo_url, stream_url, category_id, is_premium, stream_type) VALUES 
                 ('OTT KING Sports 1 HD', 'https://picsum.photos/200/200?random=1', 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', 2, 0, 'hls'),
-                ('OTT KING Premium Sports 4K', 'https://picsum.photos/200/200?random=2', 'https://playertest.longtailvideo.com/adaptive/bbbell/bbbell.m3u8', 2, 1, 'hls'),
+                ('OTT KING Premium Sports 4K', 'https://playertest.longtailvideo.com/adaptive/bbbell/bbbell.m3u8', 'https://playertest.longtailvideo.com/adaptive/bbbell/bbbell.m3u8', 2, 1, 'hls'),
                 ('World News 24/7', 'https://picsum.photos/200/200?random=3', 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 3, 0, 'hls'),
                 ('Action Movies Live', 'https://picsum.photos/200/200?random=4', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', 4, 0, 'ts'),
                 ('VIP Cinema Ultra', 'https://picsum.photos/200/200?random=5', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', 4, 1, 'ts'),

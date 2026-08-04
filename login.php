@@ -15,9 +15,9 @@ if (empty($username) || empty($password)) {
     send_secure_response(["status" => "error", "message" => "Username and password required"], 400);
 }
 
-$user = $db->fetchOne("SELECT * FROM users WHERE username = :u AND password = :p", ['u' => $username, 'p' => $password]);
+$user = $db->fetchOne("SELECT * FROM users WHERE username = :u", ['u' => $username]);
 
-if (!$user) {
+if (!$user || !verify_password($password, $user['password'])) {
     send_secure_response(["status" => "error", "message" => "Invalid username or password"], 401);
 }
 

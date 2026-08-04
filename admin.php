@@ -2,15 +2,15 @@
 require_once __DIR__ . '/config.php';
 
 // Handle Admin Authentication
-$adminUser = 'admin';
-$adminPass = '123456';
-
 $loginError = '';
 if (isset($_POST['admin_login'])) {
     $u = trim($_POST['username'] ?? '');
     $p = trim($_POST['password'] ?? '');
-    if ($u === $adminUser && $p === $adminPass) {
+
+    $adminUser = $db->fetchOne("SELECT * FROM users WHERE username = :u LIMIT 1", ['u' => $u]);
+    if ($adminUser && verify_password($p, $adminUser['password'])) {
         $_SESSION['admin_logged_in'] = true;
+        $_SESSION['admin_user_id'] = $adminUser['id'];
         header("Location: admin.php");
         exit();
     } else {
@@ -69,7 +69,7 @@ if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($u) && !empty($p)) {
             try {
                 $db->execute("INSERT INTO users (username, password, package, expiry_date) VALUES (:u, :p, :pkg, :exp)", [
-                    'u' => $u, 'p' => $p, 'pkg' => $pkg, 'exp' => $exp
+                    'u' => $u, 'p' => hash_password($p), 'pkg' => $pkg, 'exp' => $exp
                 ]);
                 $actionMsg = "User '{$u}' created successfully!";
             } catch (Exception $e) {
