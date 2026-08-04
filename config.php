@@ -120,41 +120,7 @@ class AppDatabase {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-        // Bootstrap a single admin user if the database is empty.
-        $res = $this->mysqli->query("SELECT COUNT(*) as cnt FROM users");
-        if ($res && $res->fetch_assoc()['cnt'] == 0) {
-            $adminHash = hash_password('123456');
-            $adminHash = $this->mysqli->real_escape_string($adminHash);
-            $this->mysqli->query("INSERT INTO users (username, password, package, expiry_date) VALUES ('admin', '$adminHash', 'VIP Premium Ultra', '2030-12-31')");
-        }
-
-        $res = $this->mysqli->query("SELECT COUNT(*) as cnt FROM notifications");
-        if ($res && $res->fetch_assoc()['cnt'] == 0) {
-            $this->mysqli->query("INSERT INTO notifications (title, message, target_username, target_package, type, action_text) VALUES 
-                ('Server Upgrade Notice', 'OTT KING Live TV server upgrade completed successfully. All 4K streams are active.', '', '', 'SYSTEM', 'OK'),
-                ('VIP Account Special Welcome', 'Exclusive access active for VIP Users! Stream 4K Live Sports & Ultra Movies now.', 'admin', 'VIP Premium Ultra', 'USER', 'Explore VIP')");
-        }
-
-        $res = $this->mysqli->query("SELECT COUNT(*) as cnt FROM categories");
-        if ($res && $res->fetch_assoc()['cnt'] == 0) {
-            $this->mysqli->query("INSERT INTO categories (name, icon) VALUES 
-                ('All Channels', 'ic_tv'),
-                ('Sports Live', 'ic_play'),
-                ('News & World', 'ic_info'),
-                ('Movies & Cinema', 'ic_play'),
-                ('Entertainment', 'ic_tv')");
-        }
-
-        $res = $this->mysqli->query("SELECT COUNT(*) as cnt FROM channels");
-        if ($res && $res->fetch_assoc()['cnt'] == 0) {
-            $this->mysqli->query("INSERT INTO channels (name, logo_url, stream_url, category_id, is_premium, stream_type) VALUES 
-                ('OTT KING Sports 1 HD', 'https://picsum.photos/200/200?random=1', 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', 2, 0, 'hls'),
-                ('OTT KING Premium Sports 4K', 'https://picsum.photos/200/200?random=2', 'https://playertest.longtailvideo.com/adaptive/bbbell/bbbell.m3u8', 2, 1, 'hls'),
-                ('World News 24/7', 'https://picsum.photos/200/200?random=3', 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 3, 0, 'hls'),
-                ('Action Movies Live', 'https://picsum.photos/200/200?random=4', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', 4, 0, 'ts'),
-                ('VIP Cinema Ultra', 'https://picsum.photos/200/200?random=5', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', 4, 1, 'ts'),
-                ('Entertainment Plus', 'https://picsum.photos/200/200?random=6', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', 5, 0, 'ts')");
-        }
+        // No hardcoded bootstrap data. Tables are created empty and populated only through admin actions.
     }
 
     private function initSqliteTables() {
@@ -205,38 +171,7 @@ class AppDatabase {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )");
 
-        $userCount = $this->pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
-        if ($userCount == 0) {
-            $this->pdo->exec("INSERT INTO users (username, password, package, expiry_date) VALUES ('admin', '" . hash_password('123456') . "', 'VIP Premium Ultra', '2030-12-31')");
-        }
-
-        $notifCount = $this->pdo->query("SELECT COUNT(*) FROM notifications")->fetchColumn();
-        if ($notifCount == 0) {
-            $this->pdo->exec("INSERT INTO notifications (title, message, target_username, target_package, type, action_text) VALUES 
-                ('Server Upgrade Notice', 'OTT KING Live TV server upgrade completed successfully. All 4K streams are active.', '', '', 'SYSTEM', 'OK'),
-                ('VIP Account Special Welcome', 'Exclusive access active for VIP Users! Stream 4K Live Sports & Ultra Movies now.', 'admin', 'VIP Premium Ultra', 'USER', 'Explore VIP')");
-        }
-
-        $catCount = $this->pdo->query("SELECT COUNT(*) FROM categories")->fetchColumn();
-        if ($catCount == 0) {
-            $this->pdo->exec("INSERT INTO categories (name, icon) VALUES 
-                ('All Channels', 'ic_tv'),
-                ('Sports Live', 'ic_play'),
-                ('News & World', 'ic_info'),
-                ('Movies & Cinema', 'ic_play'),
-                ('Entertainment', 'ic_tv')");
-        }
-
-        $chanCount = $this->pdo->query("SELECT COUNT(*) FROM channels")->fetchColumn();
-        if ($chanCount == 0) {
-            $this->pdo->exec("INSERT INTO channels (name, logo_url, stream_url, category_id, is_premium, stream_type) VALUES 
-                ('OTT KING Sports 1 HD', 'https://picsum.photos/200/200?random=1', 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', 2, 0, 'hls'),
-                ('OTT KING Premium Sports 4K', 'https://playertest.longtailvideo.com/adaptive/bbbell/bbbell.m3u8', 'https://playertest.longtailvideo.com/adaptive/bbbell/bbbell.m3u8', 2, 1, 'hls'),
-                ('World News 24/7', 'https://picsum.photos/200/200?random=3', 'https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8', 3, 0, 'hls'),
-                ('Action Movies Live', 'https://picsum.photos/200/200?random=4', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4', 4, 0, 'ts'),
-                ('VIP Cinema Ultra', 'https://picsum.photos/200/200?random=5', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4', 4, 1, 'ts'),
-                ('Entertainment Plus', 'https://picsum.photos/200/200?random=6', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', 5, 0, 'ts')");
-        }
+        // No hardcoded bootstrap data. Tables are created empty and populated only through admin actions.
     }
 
     public function fetchAll(string $sql, array $params = []): array {

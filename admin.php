@@ -3,7 +3,32 @@ require_once __DIR__ . '/config.php';
 
 // Handle Admin Authentication
 $loginError = '';
-if (isset($_POST['admin_login'])) {
+$existingUserRow = $db->fetchOne("SELECT COUNT(*) as cnt FROM users");
+$existingUserCount = $existingUserRow ? (int)$existingUserRow['cnt'] : 0;
+
+if (isset($_POST['create_admin'])) {
+    $u = trim($_POST['username'] ?? '');
+    $p = trim($_POST['password'] ?? '');
+
+    if (!empty($u) && !empty($p) && $existingUserCount === 0) {
+        try {
+            $db->execute("INSERT INTO users (username, password, package, expiry_date) VALUES (:u, :p, :pkg, :exp)", [
+                'u' => $u,
+                'p' => hash_password($p),
+                'pkg' => 'VIP Premium Ultra',
+                'exp' => '2030-12-31'
+            ]);
+            $_SESSION['admin_logged_in'] = true;
+            $_SESSION['admin_user_id'] = $db->lastInsertId();
+            header("Location: admin.php");
+            exit();
+        } catch (Exception $e) {
+            $loginError = 'Could not create the first admin account. Please try again.';
+        }
+    } else {
+        $loginError = 'Create a unique admin username and password to start.';
+    }
+} elseif (isset($_POST['admin_login'])) {
     $u = trim($_POST['username'] ?? '');
     $p = trim($_POST['password'] ?? '');
 
@@ -14,7 +39,7 @@ if (isset($_POST['admin_login'])) {
         header("Location: admin.php");
         exit();
     } else {
-        $loginError = 'Invalid admin credentials! Try admin / 123456';
+        $loginError = 'Invalid admin credentials.';
     }
 }
 
@@ -86,6 +111,27 @@ if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->execute("UPDATE users SET bound_device_id = NULL, session_token = NULL WHERE id = :id", ['id' => $uid]);
             $actionMsg = "Device unbound and session reset for user ID #{$uid}.";
         }
+    } else if ($postAction === 'edit_user') {
+        $uid = intval($_POST['user_id'] ?? 0);
+        $u = trim($_POST['user_name'] ?? '');
+        $p = trim($_POST['user_pass'] ?? '');
+        $pkg = trim($_POST['user_pkg'] ?? 'Basic Plan');
+        $exp = trim($_POST['user_exp'] ?? '2026-12-31');
+
+        if ($uid > 0 && !empty($u)) {
+            $setParts = ['username = :u', 'package = :pkg', 'expiry_date = :exp'];
+            $params = ['u' => $u, 'pkg' => $pkg, 'exp' => $exp, 'id' => $uid];
+            if (!empty($p)) {
+                $setParts[] = 'password = :p';
+                $params['p'] = hash_password($p);
+            }
+            try {
+                $db->execute("UPDATE users SET " . implode(', ', $setParts) . " WHERE id = :id", $params);
+                $actionMsg = "User updated successfully!";
+            } catch (Exception $e) {
+                $actionError = 'Failed to update user.';
+            }
+        }
     } else if ($postAction === 'delete_user') {
         $uid = intval($_POST['user_id'] ?? 0);
         if ($uid > 0) {
@@ -110,6 +156,21 @@ if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $actionMsg = "Channel '{$name}' added successfully!";
         }
+    } else if ($postAction === 'edit_channel') {
+        $cid = intval($_POST['chan_id'] ?? 0);
+        $name = trim($_POST['chan_name'] ?? '');
+        $logo = trim($_POST['chan_logo'] ?? '');
+        $stream = trim($_POST['chan_stream'] ?? '');
+        $catId = intval($_POST['chan_cat'] ?? 1);
+        $isPrem = isset($_POST['chan_premium']) ? 1 : 0;
+        $sType = trim($_POST['chan_type'] ?? 'hls');
+
+        if ($cid > 0 && !empty($name) && !empty($stream)) {
+            $db->execute("UPDATE channels SET name = :n, logo_url = :l, stream_url = :s, category_id = :c, is_premium = :p, stream_type = :st WHERE id = :id", [
+                'n' => $name, 'l' => $logo, 's' => $stream, 'c' => $catId, 'p' => $isPrem, 'st' => $sType, 'id' => $cid
+            ]);
+            $actionMsg = "Channel updated successfully!";
+        }
     } else if ($postAction === 'delete_channel') {
         $cid = intval($_POST['chan_id'] ?? 0);
         if ($cid > 0) {
@@ -127,6 +188,25 @@ if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!empty($cName)) {
             $db->execute("INSERT INTO categories (name, icon) VALUES (:n, :i)", ['n' => $cName, 'i' => $cIcon]);
             $actionMsg = "Category '{$cName}' created!";
+        }
+    } else if ($postAction === 'edit_category') {
+        $catId = intval($_POST['cat_id'] ?? 0);
+        $cName = trim($_POST['cat_name'] ?? '');
+        $cIcon = trim($_POST['cat_icon'] ?? 'ic_tv');
+
+        if ($catId > 0 && !empty($cName)) {
+            $db->execute("UPDATE categories SET name = :n, icon = :i WHERE id = :id", ['n' => $cName, 'i' => $cIcon, 'id' => $catId]);
+            $actionMsg = "Category updated!";
+        }
+    } else if ($postAction === 'delete_category') {
+        $catId = intval($_POST['cat_id'] ?? 0);
+        if ($catId > 0) {
+            $deleted = $db->execute("DELETE FROM categories WHERE id = :id", ['id' => $catId]);
+            if ($deleted) {
+                $actionMsg = "Category removed.";
+            } else {
+                $actionError = "Failed to delete category.";
+            }
         }
     }
 }
@@ -183,28 +263,48 @@ $allReports = $isLoggedIn ? $db->fetchAll("SELECT * FROM reports ORDER BY id DES
             <div class="alert alert-danger py-2 small"><?= htmlspecialchars($loginError) ?></div>
         <?php endif; ?>
 
-        <form method="POST">
-            <div class="mb-3">
-                <label class="form-label text-muted small">Admin Username</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-person-fill"></i></span>
-                    <input type="text" name="username" class="form-control" value="admin" required>
+        <?php if ($existingUserCount === 0): ?>
+            <div class="alert alert-info py-2 small">No admin account exists yet. Create the first one to continue.</div>
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">New Admin Username</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-person-fill"></i></span>
+                        <input type="text" name="username" class="form-control" placeholder="admin" required>
+                    </div>
                 </div>
-            </div>
-            <div class="mb-4">
-                <label class="form-label text-muted small">Admin Password</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-key-fill"></i></span>
-                    <input type="password" name="password" class="form-control" value="123456" required>
+                <div class="mb-4">
+                    <label class="form-label text-muted small">New Admin Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-key-fill"></i></span>
+                        <input type="password" name="password" class="form-control" placeholder="Choose a secure password" required>
+                    </div>
                 </div>
-            </div>
-            <button type="submit" name="admin_login" class="btn btn-primary w-100 py-2 fw-bold">
-                <i class="bi bi-box-arrow-in-right me-1"></i> Login to Admin Panel
-            </button>
-        </form>
-        <div class="text-center mt-3 text-muted small">
-            Default Credentials: <code>admin</code> / <code>123456</code>
-        </div>
+                <button type="submit" name="create_admin" class="btn btn-primary w-100 py-2 fw-bold">
+                    <i class="bi bi-box-arrow-in-right me-1"></i> Create First Admin
+                </button>
+            </form>
+        <?php else: ?>
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">Admin Username</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-person-fill"></i></span>
+                        <input type="text" name="username" class="form-control" value="admin" required>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label text-muted small">Admin Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-dark border-secondary text-muted"><i class="bi bi-key-fill"></i></span>
+                        <input type="password" name="password" class="form-control" value="123456" required>
+                    </div>
+                </div>
+                <button type="submit" name="admin_login" class="btn btn-primary w-100 py-2 fw-bold">
+                    <i class="bi bi-box-arrow-in-right me-1"></i> Login to Admin Panel
+                </button>
+            </form>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -492,6 +592,9 @@ $allReports = $isLoggedIn ? $db->fetchAll("SELECT * FROM reports ORDER BY id DES
                                                     </button>
                                                 </form>
                                             <?php endif; ?>
+                                            <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" data-bs-toggle="modal" data-bs-target="#editUserModal<?= $u['id'] ?>">
+                                                <i class="bi bi-pencil"></i>
+                                            </button>
                                             <form method="POST" onsubmit="return confirm('Delete user <?= htmlspecialchars($u['username']) ?>?');">
                                                 <input type="hidden" name="post_action" value="delete_user">
                                                 <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
@@ -577,6 +680,43 @@ $allReports = $isLoggedIn ? $db->fetchAll("SELECT * FROM reports ORDER BY id DES
                             <button type="submit" class="btn btn-info w-100 py-2 fw-bold">Add Category</button>
                         </form>
                     </div>
+
+                    <div class="card p-4">
+                        <h5 class="fw-bold mb-3"><i class="bi bi-list-ul me-2 text-warning"></i>Manage Categories</h5>
+                        <div class="table-responsive">
+                            <table class="table table-dark table-hover align-middle">
+                                <thead>
+                                    <tr><th>Name</th><th>Icon</th><th>Action</th></tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (empty($allCategories)): ?>
+                                        <tr><td colspan="3" class="text-center text-muted py-3">No categories yet.</td></tr>
+                                    <?php else: ?>
+                                        <?php foreach ($allCategories as $cat): ?>
+                                            <tr>
+                                                <td><?= htmlspecialchars($cat['name']) ?></td>
+                                                <td><code><?= htmlspecialchars($cat['icon']) ?></code></td>
+                                                <td>
+                                                    <div class="d-flex gap-2">
+                                                        <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" data-bs-toggle="modal" data-bs-target="#editCategoryModal<?= $cat['id'] ?>">
+                                                            <i class="bi bi-pencil"></i>
+                                                        </button>
+                                                        <form method="POST" onsubmit="return confirm('Delete category?');">
+                                                            <input type="hidden" name="post_action" value="delete_category">
+                                                            <input type="hidden" name="cat_id" value="<?= $cat['id'] ?>">
+                                                            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Channels Table -->
@@ -613,13 +753,18 @@ $allReports = $isLoggedIn ? $db->fetchAll("SELECT * FROM reports ORDER BY id DES
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <form method="POST" onsubmit="return confirm('Delete channel?');">
-                                                    <input type="hidden" name="post_action" value="delete_channel">
-                                                    <input type="hidden" name="chan_id" value="<?= $ch['id'] ?>">
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2">
-                                                        <i class="bi bi-trash"></i>
+                                                <div class="d-flex gap-2">
+                                                    <button type="button" class="btn btn-sm btn-outline-info py-0 px-2" data-bs-toggle="modal" data-bs-target="#editChannelModal<?= $ch['id'] ?>">
+                                                        <i class="bi bi-pencil"></i>
                                                     </button>
-                                                </form>
+                                                    <form method="POST" onsubmit="return confirm('Delete channel?');">
+                                                        <input type="hidden" name="post_action" value="delete_channel">
+                                                        <input type="hidden" name="chan_id" value="<?= $ch['id'] ?>">
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -709,6 +854,136 @@ $allReports = $isLoggedIn ? $db->fetchAll("SELECT * FROM reports ORDER BY id DES
         </div>
     </div>
 </div>
+
+<?php foreach ($allUsers as $u): ?>
+<div class="modal fade" id="editUserModal<?= $u['id'] ?>" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-light border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2"></i>Edit User</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="post_action" value="edit_user">
+                    <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Username</label>
+                        <input type="text" name="user_name" class="form-control" value="<?= htmlspecialchars($u['username']) ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">New Password (leave empty to keep)</label>
+                        <input type="text" name="user_pass" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Subscription Package</label>
+                        <select name="user_pkg" class="form-select">
+                            <option value="VIP Premium Ultra" <?= $u['package'] === 'VIP Premium Ultra' ? 'selected' : '' ?>>VIP Premium Ultra</option>
+                            <option value="Basic Plan" <?= $u['package'] === 'Basic Plan' ? 'selected' : '' ?>>Basic Plan</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Expiry Date</label>
+                        <input type="date" name="user_exp" class="form-control" value="<?= htmlspecialchars($u['expiry_date']) ?>">
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
+
+<?php foreach ($allChannels as $ch): ?>
+<div class="modal fade" id="editChannelModal<?= $ch['id'] ?>" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-light border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2"></i>Edit Channel</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="post_action" value="edit_channel">
+                    <input type="hidden" name="chan_id" value="<?= $ch['id'] ?>">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Channel Name</label>
+                        <input type="text" name="chan_name" class="form-control" value="<?= htmlspecialchars($ch['name']) ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Stream URL</label>
+                        <input type="url" name="chan_stream" class="form-control" value="<?= htmlspecialchars($ch['stream_url']) ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Logo URL</label>
+                        <input type="url" name="chan_logo" class="form-control" value="<?= htmlspecialchars($ch['logo_url'] ?? '') ?>">
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label text-muted small">Category</label>
+                            <select name="chan_cat" class="form-select">
+                                <?php foreach ($allCategories as $cat): ?>
+                                    <option value="<?= $cat['id'] ?>" <?= (int)$cat['id'] === (int)$ch['category_id'] ? 'selected' : '' ?>><?= htmlspecialchars($cat['name']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label text-muted small">Stream Format</label>
+                            <select name="chan_type" class="form-select">
+                                <option value="hls" <?= ($ch['stream_type'] ?? 'hls') === 'hls' ? 'selected' : '' ?>>HLS</option>
+                                <option value="ts" <?= ($ch['stream_type'] ?? 'hls') === 'ts' ? 'selected' : '' ?>>MPEG-TS</option>
+                                <option value="dash" <?= ($ch['stream_type'] ?? 'hls') === 'dash' ? 'selected' : '' ?>>DASH</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="chan_premium" id="premEdit<?= $ch['id'] ?>" <?= !empty($ch['is_premium']) ? 'checked' : '' ?>>
+                        <label class="form-check-label text-warning small" for="premEdit<?= $ch['id'] ?>">VIP Subscriber Only Channel</label>
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Save Channel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
+
+<?php foreach ($allCategories as $cat): ?>
+<div class="modal fade" id="editCategoryModal<?= $cat['id'] ?>" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-light border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2"></i>Edit Category</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="post_action" value="edit_category">
+                    <input type="hidden" name="cat_id" value="<?= $cat['id'] ?>">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Category Name</label>
+                        <input type="text" name="cat_name" class="form-control" value="<?= htmlspecialchars($cat['name']) ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Icon Keyword</label>
+                        <input type="text" name="cat_icon" class="form-control" value="<?= htmlspecialchars($cat['icon']) ?>">
+                    </div>
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-info">Save Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <?php endif; ?>
