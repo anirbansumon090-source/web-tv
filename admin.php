@@ -57,8 +57,12 @@ if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } else if ($postAction === 'delete_notification') {
         $nid = intval($_POST['notif_id'] ?? 0);
         if ($nid > 0) {
-            $db->execute("DELETE FROM notifications WHERE id = :id", ['id' => $nid]);
-            $actionMsg = "Notification #{$nid} deleted.";
+            $deleted = $db->execute("DELETE FROM notifications WHERE id = :id", ['id' => $nid]);
+            if ($deleted) {
+                $actionMsg = "Notification #{$nid} deleted.";
+            } else {
+                $actionError = "Failed to delete notification #{$nid}.";
+            }
         }
     } else if ($postAction === 'add_user') {
         $u = trim($_POST['user_name'] ?? '');
@@ -85,8 +89,12 @@ if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } else if ($postAction === 'delete_user') {
         $uid = intval($_POST['user_id'] ?? 0);
         if ($uid > 0) {
-            $db->execute("DELETE FROM users WHERE id = :id", ['id' => $uid]);
-            $actionMsg = "User ID #{$uid} deleted.";
+            $deleted = $db->execute("DELETE FROM users WHERE id = :id", ['id' => $uid]);
+            if ($deleted) {
+                $actionMsg = "User ID #{$uid} deleted.";
+            } else {
+                $actionError = "Failed to delete user ID #{$uid}.";
+            }
         }
     } else if ($postAction === 'add_channel') {
         $name = trim($_POST['chan_name'] ?? '');
@@ -105,8 +113,12 @@ if ($isLoggedIn && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } else if ($postAction === 'delete_channel') {
         $cid = intval($_POST['chan_id'] ?? 0);
         if ($cid > 0) {
-            $db->execute("DELETE FROM channels WHERE id = :id", ['id' => $cid]);
-            $actionMsg = "Channel #{$cid} removed.";
+            $deleted = $db->execute("DELETE FROM channels WHERE id = :id", ['id' => $cid]);
+            if ($deleted) {
+                $actionMsg = "Channel #{$cid} removed.";
+            } else {
+                $actionError = "Failed to delete channel #{$cid}.";
+            }
         }
     } else if ($postAction === 'add_category') {
         $cName = trim($_POST['cat_name'] ?? '');
