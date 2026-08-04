@@ -276,23 +276,24 @@ class AppDatabase {
     }
 
     private function prepareMysqli(string $sql, array $params = []) {
-        // Convert named parameters like :u or :p to ?
-        $paramValues = [];
         $sqlPos = $sql;
+        $paramValues = [];
 
         if (!empty($params)) {
-            preg_match_all('/:([a-zA-Z0-9_]+)/', $sql, $matches);
-            if (!empty($matches[0])) {
-                foreach ($matches[0] as $paramName) {
-                    $key = ltrim($paramName, ':');
-                    if (array_key_exists($key, $params)) {
-                        $paramValues[] = $params[$key];
-                    } else if (array_key_exists($paramName, $params)) {
-                        $paramValues[] = $params[$paramName];
-                    }
+            $sqlPos = preg_replace_callback('/:([a-zA-Z0-9_]+)/', function ($matches) use (&$paramValues, $params) {
+                $key = $matches[1];
+                if (array_key_exists($key, $params)) {
+                    $paramValues[] = $params[$key];
+                } elseif (array_key_exists(':' . $key, $params)) {
+                    $paramValues[] = $params[':' . $key];
+                } else {
+                    $paramValues[] = null;
                 }
-                $sqlPos = preg_replace('/:([a-zA-Z0-9_]+)/', '?', $sql);
-            } else {
+
+                return '?';
+            }, $sql);
+
+            if (empty($paramValues) && !preg_match('/:([a-zA-Z0-9_]+)/', $sql)) {
                 $paramValues = array_values($params);
             }
         }
