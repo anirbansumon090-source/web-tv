@@ -281,7 +281,7 @@ class AppDatabase {
         $sqlPos = $sql;
 
         if (!empty($params)) {
-            preg_match_all('/:([a_zA-Z0-9_]+)/', $sql, $matches);
+            preg_match_all('/:([a-zA-Z0-9_]+)/', $sql, $matches);
             if (!empty($matches[0])) {
                 foreach ($matches[0] as $paramName) {
                     $key = ltrim($paramName, ':');
@@ -291,7 +291,7 @@ class AppDatabase {
                         $paramValues[] = $params[$paramName];
                     }
                 }
-                $sqlPos = preg_replace('/:([a_zA-Z0-9_]+)/', '?', $sql);
+                $sqlPos = preg_replace('/:([a-zA-Z0-9_]+)/', '?', $sql);
             } else {
                 $paramValues = array_values($params);
             }
